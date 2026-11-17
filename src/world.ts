@@ -114,6 +114,7 @@ export class World {
   private boarding = { pa: 0.38, pb: 0.46 };
   private keys: Key[] = buildKeys(0.38, 0.46);
   private houseWindowMat!: THREE.MeshStandardMaterial;
+  private doorLeaves: { a: THREE.Group; b: THREE.Group } | null = null;
   private flashers: { mat: THREE.MeshStandardMaterial; phase: number }[] = [];
   private sun = new THREE.DirectionalLight();
   private hemi = new THREE.HemisphereLight(0xffffff, 0x88aa77, 1);
@@ -563,7 +564,7 @@ export class World {
 
     // --- hollow body: two thin side panels (with real window holes) + roof, rear wall, floor and hood.
     const WINDOW_Z = (i: number) => -3.25 + i * 0.98;
-    const profile = () => {
+    const profile = (rightSide: boolean) => {
       const s = new THREE.Shape();
       s.moveTo(-4.0, 0.62);
       s.lineTo(-4.0, 2.85);
@@ -577,6 +578,7 @@ export class World {
       s.lineTo(4.4, 0.62);
       s.closePath();
       for (let i = 0; i < 6; i++) {
+        if (rightSide && i === 5) continue; // the passenger door takes this bay
         const z = WINDOW_Z(i);
         const hole = new THREE.Path();
         hole.moveTo(z - 0.4, 2.0);
@@ -586,19 +588,25 @@ export class World {
         hole.closePath();
         s.holes.push(hole);
       }
+      if (rightSide) {
+        // doorway: z 1.15..1.95, from just above the step to the window line
+        const door = new THREE.Path();
+        door.moveTo(DOOR_Z - 0.4, 0.95);
+        door.lineTo(DOOR_Z - 0.4, 2.86);
+        door.lineTo(DOOR_Z + 0.4, 2.86);
+        door.lineTo(DOOR_Z + 0.4, 0.95);
+        door.closePath();
+        s.holes.push(door);
+      }
       return s;
     };
-    const panelGeo = new THREE.ExtrudeGeometry(profile(), {
-      depth: 0.08,
-      bevelEnabled: true,
-      bevelThickness: 0.03,
-      bevelSize: 0.03,
-      bevelSegments: 3,
-      curveSegments: 14,
-    });
-    panelGeo.rotateY(-Math.PI / 2); // shape x -> +z, extrude z -> -x
+    const extrudeOpts = { depth: 0.08, bevelEnabled: true, bevelThickness: 0.03, bevelSize: 0.03, bevelSegments: 3, curveSegments: 14 };
+    const panelGeoLeft = new THREE.ExtrudeGeometry(profile(false), extrudeOpts);
+    const panelGeoRight = new THREE.ExtrudeGeometry(profile(true), extrudeOpts);
+    panelGeoLeft.rotateY(-Math.PI / 2); // shape x -> +z, extrude z -> -x
+    panelGeoRight.rotateY(-Math.PI / 2);
     for (const sd of [-1, 1]) {
-      const panel = new THREE.Mesh(panelGeo, yellowMat);
+      const panel = new THREE.Mesh(sd === -1 ? panelGeoRight : panelGeoLeft, yellowMat);
       panel.position.x = sd === 1 ? W / 2 + 0.03 : -W / 2 + 0.11; // the extrusion runs toward -x
       this.bus.add(panel);
     }
@@ -633,6 +641,7 @@ export class World {
       }
       // window row: black frame around each hole + transparent glass
       for (let i = 0; i < 6; i++) {
+        if (sd === -1 && i === 5) continue; // door bay
         const z = WINDOW_Z(i);
         for (const [fy, fh, fz, fw] of [
           [1.98, 0.05, z, 0.9],
@@ -685,16 +694,38 @@ export class World {
       }
       const header = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.08, 0.88), black);
       header.position.set(dx, 2.84, DOOR_Z);
-      const seam = new THREE.Mesh(new THREE.BoxGeometry(0.06, 1.9, 0.03), black);
-      seam.position.set(dx, 1.85, DOOR_Z);
-      const doorGlass = new THREE.Mesh(new THREE.PlaneGeometry(0.72, 0.8), glass);
-      doorGlass.rotation.y = -Math.PI / 2;
-      doorGlass.position.set(dx - 0.01, 2.4, DOOR_Z);
       const step = new THREE.Mesh(new RoundedBoxGeometry(0.4, 0.07, 0.8, 2, 0.03), black);
       step.position.set(dx - 0.14, 0.92, DOOR_Z);
       const rail = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 1.3, 8), chrome);
       rail.position.set(dx - 0.1, 1.6, DOOR_Z + 0.5);
-      this.bus.add(header, seam, doorGlass, step, rail);
+      this.bus.add(header, step, rail);
+
+      // two bi-fold leaves, hinged at the posts, that swing outward while the kids climb on
+      const leaf = (hingeZ: number, dir: 1 | -1) => {
+        const pivot = new THREE.Group();
+        pivot.position.set(-W / 2 + 0.04, 0, hingeZ);
+        const lower = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.8, 0.38), yellowMat);
+        lower.position.set(0, 1.35, dir * 0.2);
+        const top = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.05, 0.4), black);
+        top.position.set(0, 2.83, dir * 0.2);
+        const mid = top.clone();
+        mid.position.y = 1.78;
+        const glassPane = new THREE.Mesh(new THREE.PlaneGeometry(0.32, 0.98), glass);
+        glassPane.rotation.y = -Math.PI / 2;
+        glassPane.position.set(-0.03, 2.3, dir * 0.2);
+        pivot.add(lower, top, mid, glassPane);
+        for (const ez of [0.02, 0.38]) {
+          const edge = new THREE.Mesh(new THREE.BoxGeometry(0.05, 1.06, 0.04), black);
+          edge.position.set(0, 2.3, dir * ez);
+          pivot.add(edge);
+        }
+        pivot.traverse((o) => {
+          if (o instanceof THREE.Mesh) o.castShadow = true;
+        });
+        this.bus.add(pivot);
+        return pivot;
+      };
+      this.doorLeaves = { a: leaf(DOOR_Z - 0.4, 1), b: leaf(DOOR_Z + 0.4, -1) };
     }
 
     // stop-sign arm (driver side, +x)
@@ -1046,6 +1077,15 @@ export class World {
     this.sun.target.position.copy(pos);
     this.sun.target.updateMatrixWorld();
 
+    if (this.doorLeaves) {
+      const { pa, pb } = this.boarding;
+      const span = pb - pa;
+      const ramp = (a: number, b: number) => smooth(THREE.MathUtils.clamp((p - a) / (b - a), 0, 1));
+      // open as the bus settles at the stop, stay open while the kids climb on, close before it pulls away
+      const open = ramp(pa, pa + span * 0.07) * (1 - ramp(pa + span * 0.91, pb));
+      this.doorLeaves.a.rotation.y = -open * Math.PI * 0.47;
+      this.doorLeaves.b.rotation.y = open * Math.PI * 0.47;
+    }
     for (const [si, s] of this.stops.entries()) {
       if (si === BOARD_STOP) {
         this.boardKids(s, p, pos, tangent, right, time);
