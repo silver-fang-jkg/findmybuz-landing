@@ -91,6 +91,7 @@ export class World {
   private beacons: THREE.Mesh[] = [];
   private headlights: THREE.SpotLight[] = [];
   private headGlow!: THREE.MeshStandardMaterial;
+  private wavers: { pivot: THREE.Group; phase: number; lean: number }[] = [];
   private kids: { group: THREE.Group; phase: number }[] = [];
   private flashers: { mat: THREE.MeshStandardMaterial; phase: number }[] = [];
   private sun = new THREE.DirectionalLight();
@@ -349,16 +350,36 @@ export class World {
       this.beacons.push(ring);
 
       const kids: THREE.Mesh[] = [];
-      for (let k = 0; k < 3; k++) {
-        const kid = new THREE.Mesh(
-          new THREE.CapsuleGeometry(0.24, 0.62, 4, 10),
-          new THREE.MeshStandardMaterial({ color: kidColors[Math.floor(rnd() * kidColors.length)], roughness: 0.6 }),
-        );
-        kid.position.copy(base).addScaledVector(t, (k - 1) * 0.85).addScaledVector(r, -0.9 + rnd() * 0.4).setY(0.55);
+      const skins = ["#f6c7a1", "#e0a47a", "#c58c5f", "#8d5a3b", "#ffd9b0"];
+      for (let k = 0; k < 6; k++) {
+        const shirt = new THREE.MeshStandardMaterial({ color: kidColors[Math.floor(rnd() * kidColors.length)], roughness: 0.6 });
+        const kid = new THREE.Mesh(new THREE.CapsuleGeometry(0.24, 0.62, 4, 10), shirt);
+        const row = k % 2;
+        kid.position
+          .copy(base)
+          .addScaledVector(t, (Math.floor(k / 2) - 1) * 0.85 + row * 0.3)
+          .addScaledVector(r, -0.7 - row * 0.9 + rnd() * 0.3)
+          .setY(0.55);
+        kid.rotation.y = Math.atan2(-r.x, -r.z) + Math.PI; // face the road
         kid.castShadow = true;
-        const head = new THREE.Mesh(new THREE.SphereGeometry(0.22, 12, 12), new THREE.MeshStandardMaterial({ color: "#ffd9b0", roughness: 0.7 }));
+        const skin = new THREE.MeshStandardMaterial({ color: skins[Math.floor(rnd() * skins.length)], roughness: 0.7 });
+        const head = new THREE.Mesh(new THREE.SphereGeometry(0.22, 12, 12), skin);
         head.position.y = 0.58;
-        kid.add(head);
+        const pack = new THREE.Mesh(new RoundedBoxGeometry(0.34, 0.46, 0.18, 2, 0.05), new THREE.MeshStandardMaterial({ color: kidColors[(k + 2) % kidColors.length], roughness: 0.7 }));
+        pack.position.set(0, 0.05, -0.27);
+        kid.add(head, pack);
+        // a waving arm for most of them
+        if (k !== 3) {
+          const pivot = new THREE.Group();
+          pivot.position.set(0.27, 0.3, 0.02);
+          const arm = new THREE.Mesh(new THREE.CapsuleGeometry(0.065, 0.3, 4, 8), shirt);
+          arm.position.y = 0.2;
+          const hand = new THREE.Mesh(new THREE.SphereGeometry(0.075, 8, 8), skin);
+          hand.position.y = 0.42;
+          pivot.add(arm, hand);
+          kid.add(pivot);
+          this.wavers.push({ pivot, phase: rnd() * Math.PI * 2, lean: -0.45 });
+        }
         this.scene.add(kid);
         kids.push(kid);
       }
@@ -641,6 +662,18 @@ export class World {
             kid.add(eye);
           }
           kid.add(body, head, hair);
+          if (Math.sign(dx) === Math.sign(sx) && kidRnd() < 0.6) {
+            const sgn = Math.sign(sx);
+            const pivot = new THREE.Group();
+            pivot.position.set(sgn * 0.19, 1.98, 0);
+            const arm = new THREE.Mesh(new THREE.CapsuleGeometry(0.045, 0.22, 4, 8), body.material);
+            arm.position.y = 0.14;
+            const hand = new THREE.Mesh(new THREE.SphereGeometry(0.05, 8, 8), head.material);
+            hand.position.y = 0.3;
+            pivot.add(arm, hand);
+            kid.add(pivot);
+            this.wavers.push({ pivot, phase: kidRnd() * Math.PI * 2, lean: -sgn * 0.35 });
+          }
           kid.position.set(sx + dx, 0, z - 0.2);
           this.bus.add(kid);
           this.kids.push({ group: kid, phase: kidRnd() * Math.PI * 2 });
@@ -884,6 +917,7 @@ export class World {
       if (c.position.x > 130) c.position.x = -130;
     }
 
+    for (const w of this.wavers) w.pivot.rotation.z = w.lean + Math.sin(time * 8 + w.phase) * 0.4 * Math.sign(w.lean || 1) * -1;
     for (const k of this.kids) {
       k.group.position.y = Math.max(0, Math.sin(time * 5 + k.phase)) * 0.025;
       k.group.rotation.z = Math.sin(time * 1.7 + k.phase) * 0.05;
