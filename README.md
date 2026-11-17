@@ -1,4 +1,4 @@
-# FindMyBuz — landing page
+# Find my buz — landing page
 
 Scroll-driven 3D landing page for the School Bus Tracking app.
 
