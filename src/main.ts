@@ -9,6 +9,8 @@ const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 const $ = <T extends Element>(sel: string) => document.querySelector<T>(sel)!;
 $("#yr").textContent = String(new Date().getFullYear());
 
+if ("scrollRestoration" in history) history.scrollRestoration = "manual";
+
 // ---- smooth scroll, wired into GSAP's ticker
 const lenis = new Lenis({ lerp: reduced ? 1 : 0.09, smoothWheel: !reduced });
 lenis.on("scroll", ScrollTrigger.update);

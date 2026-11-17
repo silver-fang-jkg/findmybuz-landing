@@ -91,6 +91,7 @@ export class World {
   private beacons: THREE.Mesh[] = [];
   private headlights: THREE.SpotLight[] = [];
   private headGlow!: THREE.MeshStandardMaterial;
+  private kids: { group: THREE.Group; phase: number }[] = [];
   private flashers: { mat: THREE.MeshStandardMaterial; phase: number }[] = [];
   private sun = new THREE.DirectionalLight();
   private hemi = new THREE.HemisphereLight(0xffffff, 0x88aa77, 1);
@@ -176,7 +177,16 @@ export class World {
     this.p = this.targetP;
   }
 
+  private locked = false;
+
+  /** Dev helper: freeze the scene at progress p, ignoring scroll. */
+  jump(p: number) {
+    this.locked = true;
+    this.targetP = this.p = p;
+  }
+
   setProgress(p: number) {
+    if (this.locked) return;
     this.targetP = THREE.MathUtils.clamp(p, 0, 1);
   }
 
@@ -384,7 +394,7 @@ export class World {
         this.school.add(w);
       }
     }
-    const sign = new THREE.Mesh(new THREE.PlaneGeometry(9, 1.1), new THREE.MeshBasicMaterial({ map: sideTexture("SUNRISE SCHOOL", "#fff8e1", "#3d2c8d") }));
+    const sign = new THREE.Mesh(new THREE.PlaneGeometry(9, 1.1), new THREE.MeshBasicMaterial({ map: sideTexture("SCHOOL", "#fff8e1", "#3d2c8d") }));
     sign.position.set(0, 6.7, 4.62);
     for (const o of [body, roof, door, tower, towerRoof]) o.castShadow = o.receiveShadow = true;
     this.school.add(body, roof, door, tower, towerRoof, clock, sign);
@@ -434,36 +444,77 @@ export class World {
     const black = new THREE.MeshStandardMaterial({ color: "#16161d", roughness: 0.55, metalness: 0.2 });
     const chrome = new THREE.MeshStandardMaterial({ color: "#d9dce6", roughness: 0.18, metalness: 1 });
     const rubber = new THREE.MeshStandardMaterial({ color: "#15151a", roughness: 0.95 });
-    const glass = new THREE.MeshPhysicalMaterial({ color: "#16263c", roughness: 0.04, metalness: 0.1, clearcoat: 1, clearcoatRoughness: 0.03 });
+    // see-through glass: the interior (seats, driver) shows through the windows and windshield
+    const glass = new THREE.MeshPhysicalMaterial({
+      color: "#a9c8e4",
+      roughness: 0.04,
+      metalness: 0,
+      transparent: true,
+      opacity: 0.2,
+      clearcoat: 1,
+      clearcoatRoughness: 0.03,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+    });
+    const seatMat = new THREE.MeshStandardMaterial({ color: "#8a5a34", roughness: 0.8 });
+    const floorMat = new THREE.MeshStandardMaterial({ color: "#3a3a46", roughness: 0.9 });
 
-    // --- body: one extruded side profile (z = forward, y = up) so the cab + hood read as a real school bus
-    const s = new THREE.Shape();
-    s.moveTo(-4.0, 0.62);
-    s.lineTo(-4.0, 2.85);
-    s.quadraticCurveTo(-4.0, 3.2, -3.62, 3.2); // rounded rear-top corner
-    s.lineTo(1.75, 3.2);
-    s.quadraticCurveTo(2.05, 3.2, 2.12, 2.9); // windshield header
-    s.lineTo(2.34, 2.0); // raked windshield
-    s.quadraticCurveTo(2.38, 1.9, 2.55, 1.9);
-    s.lineTo(4.05, 1.82); // hood
-    s.quadraticCurveTo(4.38, 1.8, 4.4, 1.5);
-    s.lineTo(4.4, 0.62);
-    s.closePath();
-    const bevel = 0.12;
-    const bodyGeo = new THREE.ExtrudeGeometry(s, {
-      depth: W - bevel * 2,
+    // --- hollow body: two thin side panels (with real window holes) + roof, rear wall, floor and hood.
+    const WINDOW_Z = (i: number) => -3.25 + i * 0.98;
+    const profile = () => {
+      const s = new THREE.Shape();
+      s.moveTo(-4.0, 0.62);
+      s.lineTo(-4.0, 2.85);
+      s.quadraticCurveTo(-4.0, 3.2, -3.62, 3.2); // rounded rear-top corner
+      s.lineTo(1.75, 3.2);
+      s.quadraticCurveTo(2.05, 3.2, 2.12, 2.9); // windshield header
+      s.lineTo(2.34, 2.0); // raked windshield
+      s.quadraticCurveTo(2.38, 1.9, 2.55, 1.9);
+      s.lineTo(4.05, 1.82); // hood
+      s.quadraticCurveTo(4.38, 1.8, 4.4, 1.5);
+      s.lineTo(4.4, 0.62);
+      s.closePath();
+      for (let i = 0; i < 6; i++) {
+        const z = WINDOW_Z(i);
+        const hole = new THREE.Path();
+        hole.moveTo(z - 0.4, 2.0);
+        hole.lineTo(z - 0.4, 2.86);
+        hole.lineTo(z + 0.4, 2.86);
+        hole.lineTo(z + 0.4, 2.0);
+        hole.closePath();
+        s.holes.push(hole);
+      }
+      return s;
+    };
+    const panelGeo = new THREE.ExtrudeGeometry(profile(), {
+      depth: 0.08,
       bevelEnabled: true,
-      bevelThickness: bevel,
-      bevelSize: bevel,
-      bevelSegments: 5,
+      bevelThickness: 0.03,
+      bevelSize: 0.03,
+      bevelSegments: 3,
       curveSegments: 14,
     });
-    bodyGeo.translate(0, 0, -(W - bevel * 2) / 2);
-    bodyGeo.rotateY(-Math.PI / 2);
-    const body = new THREE.Mesh(bodyGeo, yellowMat);
-    this.bus.add(body);
+    panelGeo.rotateY(-Math.PI / 2); // shape x -> +z, extrude z -> -x
+    for (const sd of [-1, 1]) {
+      const panel = new THREE.Mesh(panelGeo, yellowMat);
+      panel.position.x = sd === 1 ? W / 2 + 0.03 : -W / 2 + 0.11; // the extrusion runs toward -x
+      this.bus.add(panel);
+    }
+    const roof = new THREE.Mesh(new RoundedBoxGeometry(W + 0.04, 0.16, 5.95, 3, 0.07), yellowMat);
+    roof.position.set(0, 3.13, -1.1);
+    const rear = new THREE.Mesh(new RoundedBoxGeometry(W, 2.5, 0.12, 3, 0.05), yellowMat);
+    rear.position.set(0, 1.85, -3.96);
+    const rearWin = new THREE.Mesh(new THREE.PlaneGeometry(1.8, 0.6), black);
+    rearWin.position.set(0, 2.5, -4.03);
+    rearWin.rotation.y = Math.PI;
+    const floor = new THREE.Mesh(new THREE.BoxGeometry(W - 0.1, 0.08, 6.4), floorMat);
+    floor.position.set(0, 0.82, -0.8);
+    const hood = new THREE.Mesh(new RoundedBoxGeometry(W - 0.02, 1.3, 2.2, 4, 0.14), yellowMat);
+    hood.position.set(0, 1.22, 3.3);
+    const cowl = new THREE.Mesh(new THREE.BoxGeometry(W - 0.1, 1.1, 0.4), yellowMat); // closes the gap under the windshield
+    cowl.position.set(0, 1.4, 2.35);
+    this.bus.add(roof, rear, rearWin, floor, hood, cowl);
 
-    // hood is narrower than the cab: shave it visually with dark fender wells + a cowl panel
     const chassis = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.32, 8.6), black);
     chassis.position.set(0, 0.5, 0.2);
     this.bus.add(chassis);
@@ -473,21 +524,31 @@ export class World {
     for (const sd of [-1, 1]) {
       const x = sd * (W / 2 + 0.07);
       // black rub rails
-      for (const y of [1.18, 1.36, 2.02]) {
+      for (const y of [1.18, 1.36, 1.86]) {
         const rail = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.07, lenMid), black);
         rail.position.set(x, y, -0.85);
         this.bus.add(rail);
       }
-      // window row: black frame + glossy glass
+      // window row: black frame around each hole + transparent glass
       for (let i = 0; i < 6; i++) {
-        const z = -3.25 + i * 0.98;
-        const frame = new THREE.Mesh(new RoundedBoxGeometry(0.06, 0.86, 0.9, 2, 0.05), black);
-        frame.position.set(x, 2.5, z);
-        const pane = new THREE.Mesh(new RoundedBoxGeometry(0.07, 0.74, 0.78, 2, 0.04), glass);
-        pane.position.set(x + sd * 0.012, 2.5, z);
-        const split = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.03, 0.8), black);
-        split.position.set(x + sd * 0.02, 2.5, z);
-        this.bus.add(frame, pane, split);
+        const z = WINDOW_Z(i);
+        for (const [fy, fh, fz, fw] of [
+          [1.98, 0.05, z, 0.9],
+          [2.88, 0.05, z, 0.9],
+          [2.43, 0.92, z - 0.43, 0.05],
+          [2.43, 0.92, z + 0.43, 0.05],
+        ] as const) {
+          const fr = new THREE.Mesh(new THREE.BoxGeometry(0.07, fh, fw), black);
+          fr.position.set(x - sd * 0.02, fy, fz);
+          this.bus.add(fr);
+        }
+        const pane = new THREE.Mesh(new THREE.PlaneGeometry(0.8, 0.86), glass);
+        pane.rotation.y = sd * Math.PI / 2;
+        pane.position.set(sd * (W / 2 + 0.02), 2.43, z);
+        this.bus.add(pane);
+        const split = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.03, 0.8), black);
+        split.position.set(x - sd * 0.02, 2.43, z);
+        this.bus.add(split);
       }
       // wheel wells
       for (const wz of [2.95, -2.5]) {
@@ -521,14 +582,110 @@ export class World {
     armRim.position.set(W / 2 + 0.105, 1.72, 1.55);
     this.bus.add(arm, armRim);
 
-    // --- windshield (raked to match the profile) + wipers
-    const windshield = new THREE.Mesh(new RoundedBoxGeometry(2.2, 0.98, 0.07, 3, 0.04), glass);
-    windshield.position.set(0, 2.5, 2.2);
-    windshield.rotation.x = -0.24;
-    const wsFrame = new THREE.Mesh(new RoundedBoxGeometry(2.34, 1.1, 0.06, 3, 0.05), black);
-    wsFrame.position.set(0, 2.5, 2.18);
-    wsFrame.rotation.x = -0.24;
-    this.bus.add(wsFrame, windshield);
+    // --- windshield: an open raked glass pane (no body behind it) with pillars and a header
+    const rake = -Math.atan2(2.34 - 2.12, 2.95 - 2.0); // the raked line leans back as it rises
+    const glassLen = Math.hypot(2.95 - 2.0, 2.34 - 2.12);
+    const wsMid = new THREE.Vector3(0, (2.95 + 2.0) / 2, (2.34 + 2.12) / 2 + 0.02);
+    const windshieldGlass = glass.clone();
+    windshieldGlass.opacity = 0.1;
+    const windshield = new THREE.Mesh(new THREE.PlaneGeometry(W - 0.2, glassLen), windshieldGlass);
+    windshield.position.copy(wsMid);
+    windshield.rotation.x = rake;
+    this.bus.add(windshield);
+    for (const sd of [-1, 1]) {
+      const pillar = new THREE.Mesh(new THREE.BoxGeometry(0.1, glassLen + 0.1, 0.1), yellowMat);
+      pillar.position.set(sd * (W / 2 - 0.06), wsMid.y, wsMid.z);
+      pillar.rotation.x = rake;
+      this.bus.add(pillar);
+    }
+    const header = new THREE.Mesh(new THREE.BoxGeometry(W - 0.1, 0.14, 0.18), yellowMat);
+    header.position.set(0, 2.97, 2.12);
+    this.bus.add(header);
+    const dash = new THREE.Mesh(new RoundedBoxGeometry(W - 0.3, 0.3, 0.55, 2, 0.06), black);
+    dash.position.set(0, 1.98, 2.0);
+    this.bus.add(dash);
+
+    // --- interior: seats + students + driver
+    const kidRnd = mulberry32(314);
+    const kidShirts = ["#ef476f", "#06d6a0", "#118ab2", "#ffd166", "#8338ec", "#fb5607", "#ffffff"];
+    const kidSkins = ["#f6c7a1", "#e0a47a", "#c58c5f", "#8d5a3b", "#f1b98f"];
+    const kidHair = ["#2b1b12", "#5a3a22", "#111111", "#c98f3d", "#7a2e1d"];
+    for (let i = 0; i < 6; i++) {
+      const z = WINDOW_Z(i);
+      for (const sx of [-0.62, 0.62]) {
+        const base = new THREE.Mesh(new RoundedBoxGeometry(0.92, 0.14, 0.52, 2, 0.04), seatMat);
+        base.position.set(sx, 1.22, z - 0.05);
+        const back = new THREE.Mesh(new RoundedBoxGeometry(0.92, 0.62, 0.1, 2, 0.04), seatMat);
+        back.position.set(sx, 1.62, z - 0.34);
+        this.bus.add(base, back);
+
+        // students: up to two per bench, random shirts and hair, bobbing along with the ride
+        for (const dx of [-0.23, 0.23]) {
+          if (kidRnd() < 0.3) continue;
+          const kid = new THREE.Group();
+          const body = new THREE.Mesh(
+            new THREE.CapsuleGeometry(0.17, 0.28, 4, 10),
+            new THREE.MeshStandardMaterial({ color: kidShirts[Math.floor(kidRnd() * kidShirts.length)], roughness: 0.7 }),
+          );
+          body.position.y = 1.88;
+          const head = new THREE.Mesh(new THREE.SphereGeometry(0.17, 14, 14), new THREE.MeshStandardMaterial({ color: kidSkins[Math.floor(kidRnd() * kidSkins.length)], roughness: 0.7 }));
+          head.position.y = 2.28;
+          const hair = new THREE.Mesh(
+            new THREE.SphereGeometry(0.18, 14, 10, 0, Math.PI * 2, 0, Math.PI * 0.55),
+            new THREE.MeshStandardMaterial({ color: kidHair[Math.floor(kidRnd() * kidHair.length)], roughness: 0.9 }),
+          );
+          hair.position.y = 2.3;
+          for (const ex of [-0.06, 0.06]) {
+            const eye = new THREE.Mesh(new THREE.SphereGeometry(0.022, 6, 6), black);
+            eye.position.set(ex, 2.29, 0.15);
+            kid.add(eye);
+          }
+          kid.add(body, head, hair);
+          kid.position.set(sx + dx, 0, z - 0.2);
+          this.bus.add(kid);
+          this.kids.push({ group: kid, phase: kidRnd() * Math.PI * 2 });
+        }
+      }
+    }
+    const driver = new THREE.Group();
+    const skin = new THREE.MeshStandardMaterial({ color: "#f1b98f", roughness: 0.7 });
+    const shirt = new THREE.MeshStandardMaterial({ color: "#4f46e5", roughness: 0.7 });
+    const cap = new THREE.MeshStandardMaterial({ color: "#1f2a44", roughness: 0.7 });
+    const dSeat = new THREE.Mesh(new RoundedBoxGeometry(0.62, 0.14, 0.6, 2, 0.04), seatMat);
+    dSeat.position.set(0, 1.25, 0);
+    const dBack = new THREE.Mesh(new RoundedBoxGeometry(0.62, 0.7, 0.1, 2, 0.04), seatMat);
+    dBack.position.set(0, 1.65, -0.32);
+    const torso = new THREE.Mesh(new THREE.CapsuleGeometry(0.24, 0.42, 6, 14), shirt);
+    torso.position.set(0, 1.72, -0.05);
+    const head = new THREE.Mesh(new THREE.SphereGeometry(0.22, 20, 20), skin);
+    head.position.set(0, 2.2, 0.0);
+    const capTop = new THREE.Mesh(new THREE.SphereGeometry(0.235, 20, 12, 0, Math.PI * 2, 0, Math.PI / 2), cap);
+    capTop.position.set(0, 2.24, 0);
+    const brim = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.2, 0.025, 20, 1, false, -Math.PI / 2, Math.PI), cap);
+    brim.position.set(0, 2.25, 0.2);
+    brim.scale.set(1, 1, 1.0);
+    brim.rotation.y = Math.PI / 2;
+    for (const ex of [-0.08, 0.08]) {
+      const eye = new THREE.Mesh(new THREE.SphereGeometry(0.03, 8, 8), black);
+      eye.position.set(ex, 2.21, 0.2);
+      driver.add(eye);
+    }
+    const smile = new THREE.Mesh(new THREE.TorusGeometry(0.07, 0.012, 6, 14, Math.PI), black);
+    smile.position.set(0, 2.14, 0.205);
+    smile.rotation.z = Math.PI;
+    for (const ax of [-1, 1]) {
+      const arm = new THREE.Mesh(new THREE.CapsuleGeometry(0.075, 0.5, 4, 10), shirt);
+      arm.position.set(ax * 0.27, 1.78, 0.28);
+      arm.rotation.x = Math.PI / 2 - 0.35;
+      driver.add(arm);
+    }
+    const wheel = new THREE.Mesh(new THREE.TorusGeometry(0.22, 0.03, 8, 24), black);
+    wheel.position.set(0, 1.85, 0.72);
+    wheel.rotation.x = -1.0;
+    driver.add(dSeat, dBack, torso, head, capTop, brim, smile, wheel);
+    driver.scale.setScalar(1.25); // a little oversized so he reads from the hero shot
+    driver.position.set(0.62, -0.31, 1.1); // driver sits on the left (+x when facing +z)
+    this.bus.add(driver);
 
     // --- front end
     const grille = new THREE.Mesh(new RoundedBoxGeometry(1.5, 0.78, 0.1, 3, 0.05), black);
@@ -727,6 +884,10 @@ export class World {
       if (c.position.x > 130) c.position.x = -130;
     }
 
+    for (const k of this.kids) {
+      k.group.position.y = Math.max(0, Math.sin(time * 5 + k.phase)) * 0.025;
+      k.group.rotation.z = Math.sin(time * 1.7 + k.phase) * 0.05;
+    }
     for (const f of this.flashers) f.mat.emissiveIntensity = (Math.floor(time * 2.4) % 2 === f.phase ? 1.8 : 0.15);
     this.applyMood(p);
     this.cameraRig(p, pos, tangent, right);
