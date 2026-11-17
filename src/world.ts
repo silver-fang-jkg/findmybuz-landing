@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { RoundedBoxGeometry } from "three/examples/jsm/geometries/RoundedBoxGeometry.js";
+import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
 
 const UP = new THREE.Vector3(0, 1, 0);
 const ROAD_HALF = 3.2;
@@ -58,8 +59,10 @@ function sideTexture(text: string, bg: string, fg: string) {
   c.width = 1024;
   c.height = 128;
   const g = c.getContext("2d")!;
-  g.fillStyle = bg;
-  g.fillRect(0, 0, c.width, c.height);
+  if (bg !== "transparent") {
+    g.fillStyle = bg;
+    g.fillRect(0, 0, c.width, c.height);
+  }
   g.fillStyle = fg;
   g.font = "800 84px 'Bricolage Grotesque', Arial, sans-serif";
   g.textAlign = "center";
@@ -88,6 +91,7 @@ export class World {
   private beacons: THREE.Mesh[] = [];
   private headlights: THREE.SpotLight[] = [];
   private headGlow!: THREE.MeshStandardMaterial;
+  private flashers: { mat: THREE.MeshStandardMaterial; phase: number }[] = [];
   private sun = new THREE.DirectionalLight();
   private hemi = new THREE.HemisphereLight(0xffffff, 0x88aa77, 1);
   private ground: THREE.Mesh;
@@ -116,6 +120,11 @@ export class World {
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.22;
+
+    // soft studio reflections so the bus paint and glass actually look glossy
+    const pmrem = new THREE.PMREMGenerator(this.renderer);
+    this.scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+    this.scene.environmentIntensity = 0.45;
 
     this.scene.background = new THREE.Color("#ffd9bd");
     this.scene.fog = new THREE.Fog("#ffd9bd", 40, 150);
@@ -420,92 +429,189 @@ export class World {
   // -------------------------------------------------------------------- bus
 
   private buildBus() {
-    const yellow = new THREE.MeshStandardMaterial({ color: "#ffc21a", roughness: 0.38, metalness: 0.05 });
-    const dark = new THREE.MeshStandardMaterial({ color: "#1c1b2e", roughness: 0.6 });
-    const glass = new THREE.MeshStandardMaterial({ color: "#7fb7e6", roughness: 0.08, metalness: 0.4, emissive: "#16324d", emissiveIntensity: 0.25 });
+    const W = 2.6; // body width (x)
+    const yellowMat = new THREE.MeshPhysicalMaterial({ color: "#f6b400", roughness: 0.32, metalness: 0.1, clearcoat: 1, clearcoatRoughness: 0.12 });
+    const black = new THREE.MeshStandardMaterial({ color: "#16161d", roughness: 0.55, metalness: 0.2 });
+    const chrome = new THREE.MeshStandardMaterial({ color: "#d9dce6", roughness: 0.18, metalness: 1 });
+    const rubber = new THREE.MeshStandardMaterial({ color: "#15151a", roughness: 0.95 });
+    const glass = new THREE.MeshPhysicalMaterial({ color: "#16263c", roughness: 0.04, metalness: 0.1, clearcoat: 1, clearcoatRoughness: 0.03 });
 
-    // forward is +Z
-    const body = new THREE.Mesh(new RoundedBoxGeometry(2.7, 2.1, 6.4, 5, 0.28), yellow);
-    body.position.set(0, 1.75, -0.7);
-    const hood = new THREE.Mesh(new RoundedBoxGeometry(2.5, 1.2, 1.9, 5, 0.22), yellow);
-    hood.position.set(0, 1.25, 3.55);
-    const stripe = new THREE.Mesh(new THREE.BoxGeometry(2.74, 0.12, 6.45), dark);
-    stripe.position.set(0, 1.3, -0.7);
-    const stripe2 = stripe.clone();
-    stripe2.position.y = 2.3;
-    const bumper = new THREE.Mesh(new RoundedBoxGeometry(2.6, 0.32, 0.5, 3, 0.1), dark);
-    bumper.position.set(0, 0.75, 4.5);
-    const bumperB = bumper.clone();
-    bumperB.position.z = -3.95;
-    const roof = new THREE.Mesh(new RoundedBoxGeometry(2.5, 0.2, 6.1, 3, 0.08), new THREE.MeshStandardMaterial({ color: "#fff1b8", roughness: 0.5 }));
-    roof.position.set(0, 2.88, -0.7);
+    // --- body: one extruded side profile (z = forward, y = up) so the cab + hood read as a real school bus
+    const s = new THREE.Shape();
+    s.moveTo(-4.0, 0.62);
+    s.lineTo(-4.0, 2.85);
+    s.quadraticCurveTo(-4.0, 3.2, -3.62, 3.2); // rounded rear-top corner
+    s.lineTo(1.75, 3.2);
+    s.quadraticCurveTo(2.05, 3.2, 2.12, 2.9); // windshield header
+    s.lineTo(2.34, 2.0); // raked windshield
+    s.quadraticCurveTo(2.38, 1.9, 2.55, 1.9);
+    s.lineTo(4.05, 1.82); // hood
+    s.quadraticCurveTo(4.38, 1.8, 4.4, 1.5);
+    s.lineTo(4.4, 0.62);
+    s.closePath();
+    const bevel = 0.12;
+    const bodyGeo = new THREE.ExtrudeGeometry(s, {
+      depth: W - bevel * 2,
+      bevelEnabled: true,
+      bevelThickness: bevel,
+      bevelSize: bevel,
+      bevelSegments: 5,
+      curveSegments: 14,
+    });
+    bodyGeo.translate(0, 0, -(W - bevel * 2) / 2);
+    bodyGeo.rotateY(-Math.PI / 2);
+    const body = new THREE.Mesh(bodyGeo, yellowMat);
+    this.bus.add(body);
 
-    const windshield = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.95, 0.08), glass);
-    windshield.position.set(0, 2.2, 2.52);
-    this.bus.add(body, hood, stripe, stripe2, bumper, bumperB, roof, windshield);
+    // hood is narrower than the cab: shave it visually with dark fender wells + a cowl panel
+    const chassis = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.32, 8.6), black);
+    chassis.position.set(0, 0.5, 0.2);
+    this.bus.add(chassis);
 
-    for (let i = 0; i < 6; i++) {
-      for (const s of [-1, 1]) {
-        const w = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.78, 0.82), glass);
-        w.position.set(s * 1.36, 2.2, -3.1 + i * 1.02);
-        this.bus.add(w);
+    // --- side details (both sides)
+    const lenMid = 6.3;
+    for (const sd of [-1, 1]) {
+      const x = sd * (W / 2 + 0.07);
+      // black rub rails
+      for (const y of [1.18, 1.36, 2.02]) {
+        const rail = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.07, lenMid), black);
+        rail.position.set(x, y, -0.85);
+        this.bus.add(rail);
       }
-    }
-    for (const s of [-1, 1]) {
-      const tex = sideTexture("SCHOOL BUS", "#ffc21a", "#1c1b2e");
-      const label = new THREE.Mesh(new THREE.PlaneGeometry(4.6, 0.5), new THREE.MeshBasicMaterial({ map: tex }));
-      label.position.set(s * 1.37, 1.72, -0.7);
-      label.rotation.y = s * Math.PI / 2;
+      // window row: black frame + glossy glass
+      for (let i = 0; i < 6; i++) {
+        const z = -3.25 + i * 0.98;
+        const frame = new THREE.Mesh(new RoundedBoxGeometry(0.06, 0.86, 0.9, 2, 0.05), black);
+        frame.position.set(x, 2.5, z);
+        const pane = new THREE.Mesh(new RoundedBoxGeometry(0.07, 0.74, 0.78, 2, 0.04), glass);
+        pane.position.set(x + sd * 0.012, 2.5, z);
+        const split = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.03, 0.8), black);
+        split.position.set(x + sd * 0.02, 2.5, z);
+        this.bus.add(frame, pane, split);
+      }
+      // wheel wells
+      for (const wz of [2.95, -2.5]) {
+        const well = new THREE.Mesh(new THREE.CircleGeometry(0.86, 28), black);
+        well.rotation.y = sd * Math.PI / 2;
+        well.position.set(sd * (W / 2 + 0.04), 0.66, wz);
+        this.bus.add(well);
+      }
+      // mirrors
+      const arm = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.05, 0.05), black);
+      arm.position.set(sd * 1.5, 2.55, 2.45);
+      const mirror = new THREE.Mesh(new RoundedBoxGeometry(0.1, 0.5, 0.28, 2, 0.04), black);
+      mirror.position.set(sd * 1.68, 2.45, 2.45);
+      this.bus.add(arm, mirror);
+      // "SCHOOL BUS" lettering under the windows
+      const label = new THREE.Mesh(
+        new THREE.PlaneGeometry(4.6, 0.46),
+        new THREE.MeshBasicMaterial({ map: sideTexture("SCHOOL BUS", "transparent", "#16161d"), transparent: true, polygonOffset: true, polygonOffsetFactor: -2 }),
+      );
+      label.position.set(sd * (W / 2 + 0.065), 1.68, -0.85);
+      label.rotation.y = sd * Math.PI / 2;
       this.bus.add(label);
     }
 
-    // front grille + headlights
-    const grille = new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.6, 0.08), dark);
-    grille.position.set(0, 1.15, 4.52);
+    // stop-sign arm (driver side, +x)
+    const arm = new THREE.Mesh(new THREE.CircleGeometry(0.34, 8), new THREE.MeshStandardMaterial({ color: "#d62828", roughness: 0.5 }));
+    arm.rotation.y = Math.PI / 2;
+    arm.position.set(W / 2 + 0.1, 1.72, 1.55);
+    const armRim = new THREE.Mesh(new THREE.RingGeometry(0.27, 0.31, 8), new THREE.MeshBasicMaterial({ color: "#ffffff" }));
+    armRim.rotation.y = Math.PI / 2;
+    armRim.position.set(W / 2 + 0.105, 1.72, 1.55);
+    this.bus.add(arm, armRim);
+
+    // --- windshield (raked to match the profile) + wipers
+    const windshield = new THREE.Mesh(new RoundedBoxGeometry(2.2, 0.98, 0.07, 3, 0.04), glass);
+    windshield.position.set(0, 2.5, 2.2);
+    windshield.rotation.x = -0.24;
+    const wsFrame = new THREE.Mesh(new RoundedBoxGeometry(2.34, 1.1, 0.06, 3, 0.05), black);
+    wsFrame.position.set(0, 2.5, 2.18);
+    wsFrame.rotation.x = -0.24;
+    this.bus.add(wsFrame, windshield);
+
+    // --- front end
+    const grille = new THREE.Mesh(new RoundedBoxGeometry(1.5, 0.78, 0.1, 3, 0.05), black);
+    grille.position.set(0, 1.1, 4.42);
     this.bus.add(grille);
-    this.headGlow = new THREE.MeshStandardMaterial({ color: "#fffbe6", emissive: "#fff0a8", emissiveIntensity: 0.2 });
-    for (const s of [-1, 1]) {
-      const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.2, 16, 16), this.headGlow);
-      lamp.position.set(s * 0.95, 1.4, 4.48);
-      this.bus.add(lamp);
+    for (let i = 0; i < 5; i++) {
+      const slat = new THREE.Mesh(new THREE.BoxGeometry(1.34, 0.03, 0.04), chrome);
+      slat.position.set(0, 0.84 + i * 0.13, 4.49);
+      this.bus.add(slat);
+    }
+    this.headGlow = new THREE.MeshStandardMaterial({ color: "#fffbe6", emissive: "#fff0a8", emissiveIntensity: 0.25, roughness: 0.2 });
+    const bumperF = new THREE.Mesh(new RoundedBoxGeometry(2.7, 0.3, 0.42, 3, 0.1), black);
+    bumperF.position.set(0, 0.74, 4.5);
+    const bumperR = bumperF.clone();
+    bumperR.position.z = -4.1;
+    this.bus.add(bumperF, bumperR);
+    const plate = new THREE.Mesh(new THREE.PlaneGeometry(0.62, 0.3), new THREE.MeshBasicMaterial({ map: sideTexture("SB 2047", "#fffdf0", "#16161d") }));
+    plate.position.set(0, 0.98, 4.5);
+    plate.rotation.y = 0;
+    plate.position.z = 4.43;
+    this.bus.add(plate);
+
+    for (const sd of [-1, 1]) {
+      const rim = new THREE.Mesh(new THREE.TorusGeometry(0.22, 0.04, 10, 24), chrome);
+      rim.position.set(sd * 0.95, 1.38, 4.42);
+      const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.2, 18, 18), this.headGlow);
+      lamp.scale.z = 0.4;
+      lamp.position.set(sd * 0.95, 1.38, 4.42);
+      this.bus.add(rim, lamp);
       const spot = new THREE.SpotLight("#fff2c0", 0, 40, 0.45, 0.6, 1.2);
-      spot.position.set(s * 0.95, 1.4, 4.4);
-      spot.target.position.set(s * 0.95, 0.6, 18);
+      spot.position.set(sd * 0.95, 1.38, 4.4);
+      spot.target.position.set(sd * 0.95, 0.4, 18);
       this.bus.add(spot, spot.target);
       this.headlights.push(spot);
-      const tail = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.22, 0.08), new THREE.MeshStandardMaterial({ color: "#ff3b3b", emissive: "#ff1a1a", emissiveIntensity: 0.8 }));
-      tail.position.set(s * 1.0, 1.35, -3.93);
+
+      const signal = new THREE.Mesh(new RoundedBoxGeometry(0.2, 0.14, 0.08, 2, 0.03), new THREE.MeshStandardMaterial({ color: "#ff9f1a", emissive: "#ff8a00", emissiveIntensity: 0.5 }));
+      signal.position.set(sd * 1.15, 1.1, 4.44);
+      this.bus.add(signal);
+
+      const tail = new THREE.Mesh(new RoundedBoxGeometry(0.34, 0.5, 0.08, 2, 0.03), new THREE.MeshStandardMaterial({ color: "#ff3030", emissive: "#ff1a1a", emissiveIntensity: 0.7 }));
+      tail.position.set(sd * 1.05, 1.55, -4.16);
       this.bus.add(tail);
-      const warn = new THREE.Mesh(new THREE.SphereGeometry(0.14, 12, 12), new THREE.MeshStandardMaterial({ color: "#ff9f1a", emissive: "#ff8a00", emissiveIntensity: 0.9 }));
-      warn.position.set(s * 0.9, 2.95, 2.4);
-      this.bus.add(warn);
+
+      // roof warning lights: amber outside, red inside, front and rear — they flash
+      for (const [zz, inner, outer] of [[1.95, 0.62, 1.05], [-3.9, 0.62, 1.05]] as const) {
+        for (const [xx, color] of [[sd * inner, "#ff2a2a"], [sd * outer, "#ffa31a"]] as const) {
+          const mat = new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 0.6 });
+          const light = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.11, 0.07, 14), mat);
+          light.rotation.x = Math.PI / 2;
+          light.position.set(xx, 3.02, zz + (zz > 0 ? 0.06 : -0.06));
+          this.bus.add(light);
+          this.flashers.push({ mat, phase: color === "#ff2a2a" ? 0 : 1 });
+        }
+      }
     }
 
-    // stop arm
-    const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.34, 0.34, 0.05, 8), new THREE.MeshStandardMaterial({ color: "#e63946", roughness: 0.5 }));
-    arm.rotation.z = Math.PI / 2;
-    arm.position.set(1.62, 2.0, 1.9);
-    arm.rotation.y = 0;
-    this.bus.add(arm);
+    // roof hatch + stripe
+    const hatch = new THREE.Mesh(new RoundedBoxGeometry(0.8, 0.12, 0.8, 2, 0.04), yellowMat);
+    hatch.position.set(0, 3.3, -1.4);
+    this.bus.add(hatch);
 
-    // wheels
-    const wheelGeo = new THREE.CylinderGeometry(0.58, 0.58, 0.42, 20);
-    wheelGeo.rotateZ(Math.PI / 2);
-    const hubGeo = new THREE.CylinderGeometry(0.28, 0.28, 0.44, 12);
-    hubGeo.rotateZ(Math.PI / 2);
-    const hubMat = new THREE.MeshStandardMaterial({ color: "#c9ccd8", metalness: 0.7, roughness: 0.3 });
+    // --- wheels
+    const tireGeo = new THREE.CylinderGeometry(0.62, 0.62, 0.42, 28);
+    tireGeo.rotateZ(Math.PI / 2);
+    const rimGeo = new THREE.CylinderGeometry(0.36, 0.36, 0.44, 20);
+    rimGeo.rotateZ(Math.PI / 2);
+    const capGeo = new THREE.CylinderGeometry(0.13, 0.13, 0.46, 12);
+    capGeo.rotateZ(Math.PI / 2);
     for (const [x, z] of [
-      [-1.2, 2.9],
-      [1.2, 2.9],
-      [-1.2, -2.5],
-      [1.2, -2.5],
+      [-1.22, 2.95],
+      [1.22, 2.95],
+      [-1.22, -2.5],
+      [1.22, -2.5],
     ] as const) {
-      const w = new THREE.Mesh(wheelGeo, dark);
-      w.position.set(x, 0.58, z);
-      const hub = new THREE.Mesh(hubGeo, hubMat);
-      w.add(hub);
-      const lug = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.1, 0.5), hubMat);
-      w.add(lug);
+      const w = new THREE.Mesh(tireGeo, rubber);
+      w.position.set(x, 0.62, z);
+      w.add(new THREE.Mesh(rimGeo, chrome), new THREE.Mesh(capGeo, black));
+      for (let k = 0; k < 8; k++) {
+        const lug = new THREE.Mesh(new THREE.SphereGeometry(0.035, 6, 6), black);
+        const a = (k / 8) * Math.PI * 2;
+        lug.position.set(Math.sign(x) * 0.23, Math.cos(a) * 0.24, Math.sin(a) * 0.24);
+        w.add(lug);
+      }
       this.bus.add(w);
       this.wheels.push(w);
     }
@@ -596,7 +702,7 @@ export class World {
 
     const travelled = (u - this.lastU) * this.curve.getLength();
     this.lastU = u;
-    for (const w of this.wheels) w.rotation.x += travelled / 0.58;
+    for (const w of this.wheels) w.rotation.x += travelled / 0.62;
 
     this.sun.position.set(pos.x - 26, 36, pos.z - 14);
     this.sun.target.position.copy(pos);
@@ -621,6 +727,7 @@ export class World {
       if (c.position.x > 130) c.position.x = -130;
     }
 
+    for (const f of this.flashers) f.mat.emissiveIntensity = (Math.floor(time * 2.4) % 2 === f.phase ? 1.8 : 0.15);
     this.applyMood(p);
     this.cameraRig(p, pos, tangent, right);
     this.renderer.render(this.scene, this.camera);
