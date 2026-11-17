@@ -16,15 +16,33 @@ interface Key {
   lookAhead: number;
   fov: number;
 }
-const KEYS: Key[] = [
-  { p: 0.0, side: 9.5, up: 3.3, ahead: 12.5, lookSide: 0, lookUp: 1.5, lookAhead: 0, fov: 34 },
-  { p: 0.14, side: 8.5, up: 3.4, ahead: -11, lookSide: 0, lookUp: 1.6, lookAhead: 0, fov: 40 },
-  { p: 0.3, side: 13, up: 2.4, ahead: 1.5, lookSide: 0, lookUp: 1.5, lookAhead: 0, fov: 38 },
-  { p: 0.48, side: 3, up: 22, ahead: -8, lookSide: 0, lookUp: 0, lookAhead: 4, fov: 42 },
-  { p: 0.66, side: -7.5, up: 1.6, ahead: 11, lookSide: 0, lookUp: 1.7, lookAhead: -1, fov: 40 },
-  { p: 0.84, side: 11, up: 4.5, ahead: 12, lookSide: 0, lookUp: 2, lookAhead: 6, fov: 40 },
-  { p: 1.0, side: 7, up: 8.5, ahead: -24, lookSide: 0, lookUp: 3.5, lookAhead: 9, fov: 44 },
-];
+const STOP_US = [0.2, 0.43, 0.67];
+/** The stop where a child visibly boards (the middle one). */
+const BOARD_STOP = 1;
+/** Bus stops this far before the stop sign, so its front door lines up with the kids. */
+const STOP_LEAD = 0.0095;
+const DOOR_Z = 1.55;
+const DOOR_OUT = 1.3 + 0.4;
+
+/** Camera keyframes; the door close-up sits in the middle of the boarding window. */
+function buildKeys(pa: number, pb: number): Key[] {
+  const mid = (pa + pb) / 2;
+  const keys: Key[] = [
+    { p: 0.0, side: 9.5, up: 3.3, ahead: 12.5, lookSide: 0, lookUp: 1.5, lookAhead: 0, fov: 34 },
+    { p: Math.min(0.1, pa * 0.4), side: 8.5, up: 3.4, ahead: -11, lookSide: 0, lookUp: 1.6, lookAhead: 0, fov: 40 },
+    { p: pa * 0.8, side: 13, up: 2.4, ahead: 1.5, lookSide: 0, lookUp: 1.5, lookAhead: 0, fov: 38 },
+    // door close-up: camera ahead-right of the bus, looking at the sidewalk crowd and the door
+    { p: mid, side: 9.2, up: 2.6, ahead: 7.5, lookSide: 2.6, lookUp: 1.2, lookAhead: 1.5, fov: 38 },
+    { p: pb + (1 - pb) * 0.25, side: 3, up: 22, ahead: -8, lookSide: 0, lookUp: 0, lookAhead: 4, fov: 42 },
+    { p: pb + (1 - pb) * 0.55, side: -7.5, up: 1.6, ahead: 11, lookSide: 0, lookUp: 1.7, lookAhead: -1, fov: 40 },
+    { p: pb + (1 - pb) * 0.8, side: 11, up: 4.5, ahead: 12, lookSide: 0, lookUp: 2, lookAhead: 6, fov: 40 },
+    { p: 1.0, side: 7, up: 8.5, ahead: -24, lookSide: 0, lookUp: 3.5, lookAhead: 9, fov: 44 },
+  ];
+  // keep p strictly increasing
+  const out: Key[] = [];
+  for (const k of keys) if (!out.length || k.p > out[out.length - 1]!.p + 0.015) out.push(k);
+  return out;
+}
 
 interface Mood {
   p: number;
@@ -93,6 +111,9 @@ export class World {
   private headGlow!: THREE.MeshStandardMaterial;
   private wavers: { pivot: THREE.Group; phase: number; lean: number }[] = [];
   private kids: { group: THREE.Group; phase: number }[] = [];
+  private boarding = { pa: 0.38, pb: 0.46 };
+  private keys: Key[] = buildKeys(0.38, 0.46);
+  private houseWindowMat!: THREE.MeshStandardMaterial;
   private flashers: { mat: THREE.MeshStandardMaterial; phase: number }[] = [];
   private sun = new THREE.DirectionalLight();
   private hemi = new THREE.HemisphereLight(0xffffff, 0x88aa77, 1);
@@ -186,6 +207,25 @@ export class World {
     this.targetP = this.p = p;
   }
 
+  /** Scroll range (0..1) during which the bus is parked at the middle stop and the kids board. */
+  setBoarding(pa: number, pb: number) {
+    if (!(pb > pa + 0.01)) return;
+    this.boarding = { pa, pb };
+    this.keys = buildKeys(pa, pb);
+  }
+
+  /** Scroll progress -> position along the route: the bus eases into the middle stop, waits, then pulls away. */
+  private pToU(p: number) {
+    const { pa, pb } = this.boarding;
+    const u0 = 0.012;
+    const u1 = 0.965;
+    const us = STOP_US[BOARD_STOP]! - STOP_LEAD;
+    if (p <= pa) return u0 + (us - u0) * (1 - Math.pow(1 - p / pa, 1.8));
+    if (p <= pb) return us;
+    const t = (p - pb) / (1 - pb);
+    return us + (u1 - us) * (0.4 * t + 0.6 * smooth(t));
+  }
+
   setProgress(p: number) {
     if (this.locked) return;
     this.targetP = THREE.MathUtils.clamp(p, 0, 1);
@@ -265,8 +305,8 @@ export class World {
     const rnd = mulberry32(7);
     const houses: { x: number; z: number; w: number; h: number; d: number; ry: number; color: THREE.Color; roof: THREE.Color }[] = [];
     const trees: { x: number; z: number; s: number }[] = [];
-    const palette = ["#e8f7ee", "#ffffff", "#d4efe0", "#fff9c4", "#bfe3d0", "#f0fff6"].map((c) => new THREE.Color(c));
-    const roofs = ["#00382f", "#ffe600", "#0a4a42", "#ffffff", "#12695a"].map((c) => new THREE.Color(c));
+    const palette = ["#f6efdc", "#e3f3ea", "#fff1a8", "#cfe8dc", "#fbf7ee", "#f1dfc2"].map((c) => new THREE.Color(c));
+    const roofs = ["#0b4d41", "#e6c800", "#14705e", "#c9564a", "#2a2f3a", "#0b4d41"].map((c) => new THREE.Color(c));
 
     for (let i = 0; i < 1400 && (houses.length < 70 || trees.length < 260); i++) {
       const z = 14 - rnd() * 215;
@@ -310,6 +350,25 @@ export class World {
     tops.castShadow = true;
     this.scene.add(bodies, tops);
 
+    // front doors + two windows per house; the windows light up at night
+    const doorMesh = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshStandardMaterial({ color: "#7a4a2b", roughness: 0.8 }), houses.length);
+    this.houseWindowMat = new THREE.MeshStandardMaterial({ color: "#a9d8ee", emissive: "#ffe066", emissiveIntensity: 0, roughness: 0.25 });
+    const winMesh = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), this.houseWindowMat, houses.length * 2);
+    const off = new THREE.Vector3();
+    houses.forEach((h, i) => {
+      e.set(0, h.ry, 0);
+      q.setFromEuler(e);
+      off.set(0, 0.62, h.d / 2 + 0.03).applyQuaternion(q);
+      m.compose(new THREE.Vector3(h.x + off.x, off.y, h.z + off.z), q, new THREE.Vector3(0.7, 1.24, 0.08));
+      doorMesh.setMatrixAt(i, m);
+      for (const [k, side] of [-1, 1].entries()) {
+        off.set(side * h.w * 0.3, h.h * 0.62, h.d / 2 + 0.03).applyQuaternion(q);
+        m.compose(new THREE.Vector3(h.x + off.x, off.y, h.z + off.z), q, new THREE.Vector3(Math.min(0.9, h.w * 0.2), Math.min(0.9, h.h * 0.28), 0.08));
+        winMesh.setMatrixAt(i * 2 + k, m);
+      }
+    });
+    this.scene.add(doorMesh, winMesh);
+
     const trunks = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.14, 0.2, 1, 6), new THREE.MeshStandardMaterial({ color: "#7a5230", roughness: 1 }), trees.length);
     const leaves = new THREE.InstancedMesh(new THREE.ConeGeometry(0.95, 2.2, 7), new THREE.MeshStandardMaterial({ roughness: 0.9 }), trees.length);
     const greens = ["#1f8a5b", "#27a06b", "#16784f", "#34b27a"].map((c) => new THREE.Color(c));
@@ -327,7 +386,7 @@ export class World {
   private buildStops() {
     const rnd = mulberry32(21);
     const kidColors = ["#ef476f", "#118ab2", "#06d6a0", "#ffd166", "#8338ec", "#fb5607"];
-    for (const u of [0.2, 0.43, 0.67]) {
+    for (const u of STOP_US) {
       const c = this.curve.getPointAt(u);
       const t = this.curve.getTangentAt(u);
       const r = new THREE.Vector3().crossVectors(t, UP).normalize();
@@ -360,7 +419,9 @@ export class World {
           .addScaledVector(t, (Math.floor(k / 2) - 1) * 0.85 + row * 0.3)
           .addScaledVector(r, -0.7 - row * 0.9 + rnd() * 0.3)
           .setY(0.55);
-        kid.rotation.y = Math.atan2(-r.x, -r.z) + Math.PI; // face the road
+        kid.rotation.y = Math.atan2(-r.x, -r.z); // face the road
+        kid.userData.faceY = kid.rotation.y;
+        kid.userData.start = kid.position.clone();
         kid.castShadow = true;
         const skin = new THREE.MeshStandardMaterial({ color: skins[Math.floor(rnd() * skins.length)], roughness: 0.7 });
         const head = new THREE.Mesh(new THREE.SphereGeometry(0.22, 12, 12), skin);
@@ -392,15 +453,15 @@ export class World {
     const end = this.curve.getPointAt(1);
     const t = this.curve.getTangentAt(1);
     const mat = (c: string) => new THREE.MeshStandardMaterial({ color: c, roughness: 0.85 });
-    const body = new THREE.Mesh(new RoundedBoxGeometry(22, 8, 9, 3, 0.25), mat("#f1fbf5"));
+    const body = new THREE.Mesh(new RoundedBoxGeometry(22, 8, 9, 3, 0.25), mat("#f4ead2"));
     body.position.y = 4;
-    const roof = new THREE.Mesh(new THREE.BoxGeometry(23, 0.7, 10), mat("#00211e"));
+    const roof = new THREE.Mesh(new THREE.BoxGeometry(23, 0.7, 10), mat("#0b4d41"));
     roof.position.y = 8.3;
     const door = new THREE.Mesh(new THREE.BoxGeometry(3.2, 4, 0.3), mat("#ffe600"));
     door.position.set(0, 2, 4.6);
-    const tower = new THREE.Mesh(new THREE.BoxGeometry(5, 5, 5), mat("#e0f5e8"));
+    const tower = new THREE.Mesh(new THREE.BoxGeometry(5, 5, 5), mat("#efe2c0"));
     tower.position.set(0, 10.5, 0);
-    const towerRoof = new THREE.Mesh(new THREE.ConeGeometry(4, 3.2, 4), mat("#00211e"));
+    const towerRoof = new THREE.Mesh(new THREE.ConeGeometry(4, 3.2, 4), mat("#0b4d41"));
     towerRoof.position.set(0, 14.6, 0);
     towerRoof.rotation.y = Math.PI / 4;
     const clock = new THREE.Mesh(new THREE.CircleGeometry(1.4, 24), new THREE.MeshStandardMaterial({ color: "#fff8e1", emissive: "#fff0b3", emissiveIntensity: 0.4 }));
@@ -417,7 +478,27 @@ export class World {
     }
     const sign = new THREE.Mesh(new THREE.PlaneGeometry(9, 1.1), new THREE.MeshBasicMaterial({ map: sideTexture("SCHOOL", "#ffe600", "#00211e") }));
     sign.position.set(0, 6.7, 4.62);
-    for (const o of [body, roof, door, tower, towerRoof]) o.castShadow = o.receiveShadow = true;
+    // details: yellow trim band, entrance steps + portico, flagpole with a yellow flag
+    const trim = new THREE.Mesh(new THREE.BoxGeometry(22.4, 0.3, 9.4), mat("#ffe600"));
+    trim.position.y = 7.8;
+    const plinth = new THREE.Mesh(new THREE.BoxGeometry(22.4, 0.6, 9.4), mat("#8b9a92"));
+    plinth.position.y = 0.3;
+    const steps = new THREE.Mesh(new THREE.BoxGeometry(6, 0.5, 2.2), mat("#9aa8a0"));
+    steps.position.set(0, 0.25, 5.4);
+    const portico = new THREE.Mesh(new THREE.BoxGeometry(6, 0.4, 2.6), mat("#0b4d41"));
+    portico.position.set(0, 4.6, 5.2);
+    for (const px of [-2.7, 2.7]) {
+      const pillar = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.22, 4.4, 12), mat("#fff8e6"));
+      pillar.position.set(px, 2.4, 6.3);
+      pillar.castShadow = true;
+      this.school.add(pillar);
+    }
+    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 7, 8), mat("#cfd6d2"));
+    pole.position.set(10.5, 3.5, 6.2);
+    const flag = new THREE.Mesh(new THREE.PlaneGeometry(1.8, 1.1), new THREE.MeshStandardMaterial({ color: "#ffe600", side: THREE.DoubleSide, roughness: 0.8 }));
+    flag.position.set(11.4, 6.4, 6.2);
+    this.school.add(trim, plinth, steps, portico, pole, flag);
+    for (const o of [body, roof, door, tower, towerRoof, portico]) o.castShadow = o.receiveShadow = true;
     this.school.add(body, roof, door, tower, towerRoof, clock, sign);
     this.school.position.copy(end).addScaledVector(t, 13);
     this.school.lookAt(this.school.position.clone().addScaledVector(t, -10));
@@ -592,6 +673,28 @@ export class World {
       label.position.set(sd * (W / 2 + 0.065), 1.68, -0.85);
       label.rotation.y = sd * Math.PI / 2;
       this.bus.add(label);
+    }
+
+    // passenger door (right side, -x): frame posts, header, glass and a step
+    {
+      const dx = -(W / 2 + 0.08);
+      for (const dz of [-0.4, 0.4]) {
+        const post = new THREE.Mesh(new THREE.BoxGeometry(0.07, 1.95, 0.08), black);
+        post.position.set(dx, 1.85, DOOR_Z + dz);
+        this.bus.add(post);
+      }
+      const header = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.08, 0.88), black);
+      header.position.set(dx, 2.84, DOOR_Z);
+      const seam = new THREE.Mesh(new THREE.BoxGeometry(0.06, 1.9, 0.03), black);
+      seam.position.set(dx, 1.85, DOOR_Z);
+      const doorGlass = new THREE.Mesh(new THREE.PlaneGeometry(0.72, 0.8), glass);
+      doorGlass.rotation.y = -Math.PI / 2;
+      doorGlass.position.set(dx - 0.01, 2.4, DOOR_Z);
+      const step = new THREE.Mesh(new RoundedBoxGeometry(0.4, 0.07, 0.8, 2, 0.03), black);
+      step.position.set(dx - 0.14, 0.92, DOOR_Z);
+      const rail = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 1.3, 8), chrome);
+      rail.position.set(dx - 0.1, 1.6, DOOR_Z + 0.5);
+      this.bus.add(header, seam, doorGlass, step, rail);
     }
 
     // stop-sign arm (driver side, +x)
@@ -841,10 +944,12 @@ export class World {
     for (const l of this.headlights) l.intensity = night * 260;
     this.headGlow.emissiveIntensity = 0.2 + night * 2.2;
     (this.school.userData.windowMat as THREE.MeshStandardMaterial).emissiveIntensity = night * 1.4;
+    this.houseWindowMat.emissiveIntensity = night * 1.3;
   }
 
   private cameraRig(p: number, busPos: THREE.Vector3, tangent: THREE.Vector3, right: THREE.Vector3) {
     let i = 0;
+    const KEYS = this.keys;
     while (i < KEYS.length - 2 && p > KEYS[i + 1]!.p) i++;
     const a = KEYS[i]!;
     const b = KEYS[i + 1]!;
@@ -873,6 +978,49 @@ export class World {
     }
   }
 
+  /**
+   * The middle stop's crowd boards one by one while the bus is parked. Driven purely by scroll progress,
+   * so scrubbing back and forth plays it forwards and backwards.
+   */
+  private boardKids(s: Stop, p: number, busPos: THREE.Vector3, tangent: THREE.Vector3, right: THREE.Vector3, time: number) {
+    const { pa, pb } = this.boarding;
+    const span = pb - pa;
+    const door = this.tmpC.copy(busPos).addScaledVector(right, DOOR_OUT).addScaledVector(tangent, DOOR_Z);
+    // nearest to the door boards first
+    const order = s.kids
+      .map((k, i) => ({ i, d: (k.userData.start as THREE.Vector3).distanceToSquared(door) }))
+      .sort((a, b) => a.d - b.d)
+      .map((x) => x.i);
+    const dir = new THREE.Vector3();
+    for (const [i, k] of s.kids.entries()) {
+      const start = k.userData.start as THREE.Vector3;
+      const slot = order.indexOf(i);
+      const t0 = pa + span * (0.05 + slot * 0.11);
+      const q = THREE.MathUtils.clamp((p - t0) / (span * 0.3), 0, 1);
+      if (q >= 1) {
+        k.visible = false;
+        continue;
+      }
+      k.visible = true;
+      const e = smooth(q);
+      k.position.lerpVectors(start, door, e);
+      const walking = q > 0 && q < 1;
+      // a small hop per step while walking, idle bounce while waiting
+      k.position.y = 0.55 + (walking ? Math.abs(Math.sin(q * Math.PI * 7)) * 0.12 : Math.abs(Math.sin(time * 4 + i * 1.7)) * 0.08);
+      if (walking) {
+        dir.subVectors(door, start);
+        k.rotation.y = Math.atan2(dir.x, dir.z);
+      } else {
+        k.rotation.y = k.userData.faceY as number;
+      }
+      // step through the door: shrink away over the last stretch
+      k.scale.setScalar(1 - smooth(THREE.MathUtils.clamp((q - 0.82) / 0.18, 0, 1)));
+    }
+    const m = s.ring.material as THREE.MeshBasicMaterial;
+    m.opacity = p > pb ? Math.max(0, m.opacity - 0.05) : 0.45 + Math.sin(time * 3) * 0.25;
+    s.ring.scale.setScalar(1 + (Math.sin(time * 3) * 0.5 + 0.5) * 0.18);
+  }
+
   private tick = () => {
     const rawDt = this.clock.getDelta();
     const dt = Math.min(rawDt, 0.05);
@@ -880,7 +1028,7 @@ export class World {
     this.p += (this.targetP - this.p) * (1 - Math.exp(-rawDt * (this.reducedMotion ? 30 : 5)));
     const p = this.p;
 
-    const u = THREE.MathUtils.lerp(0.012, 0.965, p);
+    const u = this.pToU(p);
     const pos = this.curve.getPointAt(u);
     const tangent = this.curve.getTangentAt(u).setY(0).normalize();
     const right = this.tmpB.crossVectors(tangent, UP).normalize().clone();
@@ -898,7 +1046,11 @@ export class World {
     this.sun.target.position.copy(pos);
     this.sun.target.updateMatrixWorld();
 
-    for (const s of this.stops) {
+    for (const [si, s] of this.stops.entries()) {
+      if (si === BOARD_STOP) {
+        this.boardKids(s, p, pos, tangent, right, time);
+        continue;
+      }
       const gone = u > s.u - 0.012;
       for (const [i, k] of s.kids.entries()) {
         const target = gone ? 0.001 : 1;

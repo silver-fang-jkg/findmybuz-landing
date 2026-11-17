@@ -161,6 +161,16 @@ h3 { font-family: var(--display); font-weight: 700; font-size: 22px; letter-spac
 .mini-route i { position: absolute; inset: 0; width: 40%; background: var(--abyss); border-radius: 9px; animation: slide 3.2s ease-in-out infinite; }
 @keyframes slide { 0% { transform: translateX(-100%); } 100% { transform: translateX(260%); } }
 
+/* boarding moment: mostly empty so the 3D scene is the star */
+.moment { height: 230vh; position: relative; }
+.moment-sticky { position: sticky; top: 66vh; padding-bottom: 20px; }
+.moment-card { display: inline-flex; align-items: center; gap: 16px; padding: 18px 24px 18px 18px; max-width: 420px; border-radius: 24px; transition: border-color .4s, box-shadow .4s; }
+.moment-card.done { border-color: rgba(255, 230, 0, 0.7); box-shadow: 0 0 0 4px rgba(255, 230, 0, 0.15), 0 30px 80px -30px rgba(0, 0, 0, 0.6); }
+.moment-ic { width: 46px; height: 46px; border-radius: 15px; background: var(--yellow); display: grid; place-items: center; font-size: 22px; flex: none; }
+.moment-card small { display: block; font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--yellow); }
+.moment-card b { display: block; font-family: var(--display); font-size: 22px; letter-spacing: -.02em; margin: 2px 0; }
+.moment-card p { font-size: 14px; color: var(--muted); font-weight: 500; }
+
 /* roles: Pure White cards, abyss text, one yellow */
 .roles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
 .role { padding: 32px; border-radius: 32px; background: #fff; color: var(--abyss); box-shadow: 0 30px 70px -30px rgba(0, 0, 0, .7); }

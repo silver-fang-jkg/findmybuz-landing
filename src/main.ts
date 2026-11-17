@@ -28,12 +28,47 @@ document.querySelectorAll<HTMLAnchorElement>('a[href^="#"]').forEach((a) => {
 });
 
 // ---- 3D world (falls back to a plain gradient if WebGL is unavailable)
+/**
+ * The bus parks at the middle stop for as long as the "boarding" section is on screen. Convert that section's
+ * scroll range to progress (0..1) so the 3D scene can hold the bus there and walk the kids on.
+ */
+function wireBoarding(world: { setBoarding(pa: number, pb: number): void }) {
+  const section = $<HTMLElement>("#boarding");
+  const card = $<HTMLElement>("#momentCard");
+  const sync = () => {
+    const vh = window.innerHeight;
+    const max = document.documentElement.scrollHeight - vh;
+    const top = section.getBoundingClientRect().top + window.scrollY;
+    world.setBoarding((top - vh * 0.25) / max, (top + section.offsetHeight - vh * 1.05) / max);
+  };
+  sync();
+  ScrollTrigger.addEventListener("refresh", sync);
+  window.addEventListener("resize", sync);
+
+  const time = $<HTMLElement>("#momentTime");
+  const title = $<HTMLElement>("#momentTitle");
+  const sub = $<HTMLElement>("#momentSub");
+  ScrollTrigger.create({
+    trigger: section,
+    start: "top 20%",
+    end: "bottom 100%",
+    onUpdate: (self) => {
+      const boarded = self.progress > 0.62;
+      card.classList.toggle("done", boarded);
+      time.textContent = boarded ? "7:42 · Maple Street" : "Maple Street · 7:41";
+      title.textContent = boarded ? "Aarav boarded the bus" : self.progress > 0.2 ? "Kids are climbing on…" : "Waiting at the stop…";
+      sub.textContent = boarded ? "Parents were notified instantly." : "Scroll to let the kids on.";
+    },
+  });
+}
+
 async function startWorld() {
   const canvas = $<HTMLCanvasElement>("#world");
   try {
     const { World } = await import("./world");
     const world = new World(canvas);
     if (import.meta.env.DEV) (window as unknown as { __world: unknown }).__world = world;
+    wireBoarding(world);
     ScrollTrigger.create({
       trigger: document.body,
       start: 0,
