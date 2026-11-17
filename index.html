@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>SchoolBus Live — know exactly where the bus is</title>
     <meta name="description" content="Real-time school bus tracking for parents, drivers and helpers. Live map, instant boarding alerts, SOS and delay notices." />
     <meta name="theme-color" content="#00211e" />
@@ -27,7 +27,15 @@
         <a href="#roles">Who it's for</a>
         <a href="#safety">Safety</a>
       </nav>
-      <a class="btn btn-ink magnetic" href="#get">Get the app</a>
+      <a class="btn btn-ink magnetic nav-cta" href="#get">Get the app</a>
+      <button class="nav-toggle" id="navToggle" type="button" aria-label="Open menu" aria-expanded="false" aria-controls="mobileMenu"><span></span><span></span></button>
+      <div class="mobile-menu" id="mobileMenu">
+        <a href="#tracking">Live tracking</a>
+        <a href="#features">Features</a>
+        <a href="#roles">Who it's for</a>
+        <a href="#safety">Safety</a>
+        <a class="btn btn-primary" href="#get">Get the app <span class="arrow">→</span></a>
+      </div>
     </header>
 
     <main id="top">

@@ -23,9 +23,30 @@ document.querySelectorAll<HTMLAnchorElement>('a[href^="#"]').forEach((a) => {
     const target = id === "#top" ? 0 : document.querySelector<HTMLElement>(id);
     if (target === null) return;
     e.preventDefault();
+    lenis.start(); // the mobile menu stops scrolling while open
     lenis.scrollTo(target as number | HTMLElement, { duration: 1.6 });
   });
 });
+
+// ---- mobile menu: hamburger toggles a panel, locks scroll while open, closes on link / Esc / widen
+{
+  const nav = $<HTMLElement>(".nav");
+  const toggle = $<HTMLButtonElement>("#navToggle");
+  const setOpen = (open: boolean) => {
+    nav.classList.toggle("open", open);
+    toggle.setAttribute("aria-expanded", String(open));
+    toggle.setAttribute("aria-label", open ? "Close menu" : "Open menu");
+    if (open) lenis.stop();
+    else lenis.start();
+  };
+  toggle.addEventListener("click", () => setOpen(!nav.classList.contains("open")));
+  document.querySelectorAll<HTMLAnchorElement>("#mobileMenu a").forEach((a) => a.addEventListener("click", () => setOpen(false)));
+  window.addEventListener("keydown", (e) => e.key === "Escape" && setOpen(false));
+  window.addEventListener("resize", () => window.innerWidth > 960 && setOpen(false));
+  document.addEventListener("pointerdown", (e) => {
+    if (nav.classList.contains("open") && !nav.contains(e.target as Node)) setOpen(false);
+  });
+}
 
 // ---- 3D world (falls back to a plain gradient if WebGL is unavailable)
 /**
