@@ -35,11 +35,11 @@ interface Mood {
   hemi: number;
 }
 const MOODS: Mood[] = [
-  { p: 0.0, sky: "#ffd9bd", ground: "#a9d68f", sun: "#ffc99a", sunIntensity: 2.4, hemi: 0.9 },
-  { p: 0.3, sky: "#bfe4ff", ground: "#9fd18b", sun: "#fff4dd", sunIntensity: 3.0, hemi: 1.0 },
-  { p: 0.62, sky: "#c9e9ff", ground: "#93c97f", sun: "#ffffff", sunIntensity: 3.1, hemi: 1.0 },
-  { p: 0.82, sky: "#ffb98a", ground: "#8fb878", sun: "#ff9f5a", sunIntensity: 2.6, hemi: 0.8 },
-  { p: 1.0, sky: "#26245f", ground: "#3d5a52", sun: "#7f86ff", sunIntensity: 0.9, hemi: 0.45 },
+  { p: 0.0, sky: "#06322d", ground: "#0d4a40", sun: "#fff0a0", sunIntensity: 2.2, hemi: 0.85 },
+  { p: 0.3, sky: "#0b4a41", ground: "#14614f", sun: "#fff6c2", sunIntensity: 2.8, hemi: 1.0 },
+  { p: 0.62, sky: "#116356", ground: "#1b7660", sun: "#ffffff", sunIntensity: 3.0, hemi: 1.0 },
+  { p: 0.82, sky: "#0a3a33", ground: "#124c42", sun: "#ffe066", sunIntensity: 2.4, hemi: 0.8 },
+  { p: 1.0, sky: "#00110f", ground: "#06241f", sun: "#9cffe0", sunIntensity: 0.9, hemi: 0.45 },
 ];
 
 const smooth = (t: number) => t * t * (3 - 2 * t);
@@ -128,8 +128,8 @@ export class World {
     this.scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
     this.scene.environmentIntensity = 0.45;
 
-    this.scene.background = new THREE.Color("#ffd9bd");
-    this.scene.fog = new THREE.Fog("#ffd9bd", 40, 150);
+    this.scene.background = new THREE.Color("#06322d");
+    this.scene.fog = new THREE.Fog("#06322d", 40, 150);
 
     const pts = [
       [0, 0],
@@ -207,7 +207,7 @@ export class World {
   private buildGround() {
     const mesh = new THREE.Mesh(
       new THREE.PlaneGeometry(700, 700),
-      new THREE.MeshStandardMaterial({ color: "#a9d68f", roughness: 1 }),
+      new THREE.MeshStandardMaterial({ color: "#0d4a40", roughness: 1 }),
     );
     mesh.rotation.x = -Math.PI / 2;
     mesh.position.set(0, -0.06, -95);
@@ -242,12 +242,12 @@ export class World {
 
   private buildRoad() {
     const n = this.samples.length - 1;
-    this.ribbon(0, n, -ROAD_HALF - 1.6, ROAD_HALF + 1.6, 0.0, new THREE.MeshStandardMaterial({ color: "#e9e4d8", roughness: 1 }));
-    this.ribbon(0, n, -ROAD_HALF, ROAD_HALF, 0.02, new THREE.MeshStandardMaterial({ color: "#3a3d4a", roughness: 0.92 }));
+    this.ribbon(0, n, -ROAD_HALF - 1.6, ROAD_HALF + 1.6, 0.0, new THREE.MeshStandardMaterial({ color: "#7fa898", roughness: 1 }));
+    this.ribbon(0, n, -ROAD_HALF, ROAD_HALF, 0.02, new THREE.MeshStandardMaterial({ color: "#0f1f21", roughness: 0.92 }));
     const white = new THREE.MeshStandardMaterial({ color: "#f5f5f0", roughness: 0.9 });
     this.ribbon(0, n, -ROAD_HALF + 0.3, -ROAD_HALF + 0.42, 0.03, white);
     this.ribbon(0, n, ROAD_HALF - 0.42, ROAD_HALF - 0.3, 0.03, white);
-    const yellow = new THREE.MeshStandardMaterial({ color: "#ffc21a", roughness: 0.8 });
+    const yellow = new THREE.MeshStandardMaterial({ color: "#ffe600", roughness: 0.8 });
     for (let i = 0; i < n - 4; i += 9) this.ribbon(i, i + 4, -0.1, 0.1, 0.035, yellow);
   }
 
@@ -265,8 +265,8 @@ export class World {
     const rnd = mulberry32(7);
     const houses: { x: number; z: number; w: number; h: number; d: number; ry: number; color: THREE.Color; roof: THREE.Color }[] = [];
     const trees: { x: number; z: number; s: number }[] = [];
-    const palette = ["#ffe0c2", "#ffd0d0", "#d6ecff", "#fff0b8", "#e4d9ff", "#d8f3dc"].map((c) => new THREE.Color(c));
-    const roofs = ["#e76f51", "#6c63ff", "#ef476f", "#118ab2", "#f4a261"].map((c) => new THREE.Color(c));
+    const palette = ["#e8f7ee", "#ffffff", "#d4efe0", "#fff9c4", "#bfe3d0", "#f0fff6"].map((c) => new THREE.Color(c));
+    const roofs = ["#00382f", "#ffe600", "#0a4a42", "#ffffff", "#12695a"].map((c) => new THREE.Color(c));
 
     for (let i = 0; i < 1400 && (houses.length < 70 || trees.length < 260); i++) {
       const z = 14 - rnd() * 215;
@@ -312,7 +312,7 @@ export class World {
 
     const trunks = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.14, 0.2, 1, 6), new THREE.MeshStandardMaterial({ color: "#7a5230", roughness: 1 }), trees.length);
     const leaves = new THREE.InstancedMesh(new THREE.ConeGeometry(0.95, 2.2, 7), new THREE.MeshStandardMaterial({ roughness: 0.9 }), trees.length);
-    const greens = ["#3f9d57", "#4caf6a", "#2f8a4b", "#62b86f"].map((c) => new THREE.Color(c));
+    const greens = ["#1f8a5b", "#27a06b", "#16784f", "#34b27a"].map((c) => new THREE.Color(c));
     trees.forEach((t, i) => {
       m.compose(new THREE.Vector3(t.x, 0.5 * t.s, t.z), q.identity(), new THREE.Vector3(t.s, t.s, t.s));
       trunks.setMatrixAt(i, m);
@@ -335,7 +335,7 @@ export class World {
 
       const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 2.8, 8), new THREE.MeshStandardMaterial({ color: "#555a6e" }));
       pole.position.copy(base).setY(1.4);
-      const sign = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.55, 0.08, 8), new THREE.MeshStandardMaterial({ color: "#ffc21a", emissive: "#ffb000", emissiveIntensity: 0.3 }));
+      const sign = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.55, 0.08, 8), new THREE.MeshStandardMaterial({ color: "#ffe600", emissive: "#ffd400", emissiveIntensity: 0.3 }));
       sign.geometry.rotateX(Math.PI / 2);
       sign.rotation.y = Math.atan2(-t.x, -t.z);
       sign.position.copy(base).setY(2.7);
@@ -343,7 +343,7 @@ export class World {
 
       const ring = new THREE.Mesh(
         new THREE.RingGeometry(1.4, 1.7, 40),
-        new THREE.MeshBasicMaterial({ color: "#6c63ff", transparent: true, opacity: 0.7, side: THREE.DoubleSide }),
+        new THREE.MeshBasicMaterial({ color: "#ffe600", transparent: true, opacity: 0.7, side: THREE.DoubleSide }),
       );
       ring.rotation.x = -Math.PI / 2;
       ring.position.copy(base).addScaledVector(r, -0.4).setY(0.05);
@@ -392,15 +392,15 @@ export class World {
     const end = this.curve.getPointAt(1);
     const t = this.curve.getTangentAt(1);
     const mat = (c: string) => new THREE.MeshStandardMaterial({ color: c, roughness: 0.85 });
-    const body = new THREE.Mesh(new RoundedBoxGeometry(22, 8, 9, 3, 0.25), mat("#ff8a65"));
+    const body = new THREE.Mesh(new RoundedBoxGeometry(22, 8, 9, 3, 0.25), mat("#f1fbf5"));
     body.position.y = 4;
-    const roof = new THREE.Mesh(new THREE.BoxGeometry(23, 0.7, 10), mat("#5b4fe0"));
+    const roof = new THREE.Mesh(new THREE.BoxGeometry(23, 0.7, 10), mat("#00211e"));
     roof.position.y = 8.3;
-    const door = new THREE.Mesh(new THREE.BoxGeometry(3.2, 4, 0.3), mat("#3d2c8d"));
+    const door = new THREE.Mesh(new THREE.BoxGeometry(3.2, 4, 0.3), mat("#ffe600"));
     door.position.set(0, 2, 4.6);
-    const tower = new THREE.Mesh(new THREE.BoxGeometry(5, 5, 5), mat("#ffb08f"));
+    const tower = new THREE.Mesh(new THREE.BoxGeometry(5, 5, 5), mat("#e0f5e8"));
     tower.position.set(0, 10.5, 0);
-    const towerRoof = new THREE.Mesh(new THREE.ConeGeometry(4, 3.2, 4), mat("#5b4fe0"));
+    const towerRoof = new THREE.Mesh(new THREE.ConeGeometry(4, 3.2, 4), mat("#00211e"));
     towerRoof.position.set(0, 14.6, 0);
     towerRoof.rotation.y = Math.PI / 4;
     const clock = new THREE.Mesh(new THREE.CircleGeometry(1.4, 24), new THREE.MeshStandardMaterial({ color: "#fff8e1", emissive: "#fff0b3", emissiveIntensity: 0.4 }));
@@ -415,7 +415,7 @@ export class World {
         this.school.add(w);
       }
     }
-    const sign = new THREE.Mesh(new THREE.PlaneGeometry(9, 1.1), new THREE.MeshBasicMaterial({ map: sideTexture("SCHOOL", "#fff8e1", "#3d2c8d") }));
+    const sign = new THREE.Mesh(new THREE.PlaneGeometry(9, 1.1), new THREE.MeshBasicMaterial({ map: sideTexture("SCHOOL", "#ffe600", "#00211e") }));
     sign.position.set(0, 6.7, 4.62);
     for (const o of [body, roof, door, tower, towerRoof]) o.castShadow = o.receiveShadow = true;
     this.school.add(body, roof, door, tower, towerRoof, clock, sign);
@@ -426,7 +426,7 @@ export class World {
 
   private buildClouds() {
     const rnd = mulberry32(99);
-    const mat = new THREE.MeshStandardMaterial({ color: "#ffffff", roughness: 1, flatShading: true, transparent: true, opacity: 0.95 });
+    const mat = new THREE.MeshStandardMaterial({ color: "#d8fff0", roughness: 1, flatShading: true, transparent: true, opacity: 0.5 });
     for (let i = 0; i < 16; i++) {
       const g = new THREE.Group();
       const parts = 3 + Math.floor(rnd() * 3);
@@ -461,7 +461,7 @@ export class World {
 
   private buildBus() {
     const W = 2.6; // body width (x)
-    const yellowMat = new THREE.MeshPhysicalMaterial({ color: "#f6b400", roughness: 0.32, metalness: 0.1, clearcoat: 1, clearcoatRoughness: 0.12 });
+    const yellowMat = new THREE.MeshPhysicalMaterial({ color: "#ffdc00", roughness: 0.32, metalness: 0.1, clearcoat: 1, clearcoatRoughness: 0.12 });
     const black = new THREE.MeshStandardMaterial({ color: "#16161d", roughness: 0.55, metalness: 0.2 });
     const chrome = new THREE.MeshStandardMaterial({ color: "#d9dce6", roughness: 0.18, metalness: 1 });
     const rubber = new THREE.MeshStandardMaterial({ color: "#15151a", roughness: 0.95 });

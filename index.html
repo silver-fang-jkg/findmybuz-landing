@@ -5,8 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>SchoolBus Live — know exactly where the bus is</title>
     <meta name="description" content="Real-time school bus tracking for parents, drivers and helpers. Live map, instant boarding alerts, SOS and delay notices." />
-    <meta name="theme-color" content="#ffd9bd" />
-    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%234f46e5'/%3E%3Crect x='10' y='20' width='44' height='26' rx='7' fill='%23ffc21a'/%3E%3Crect x='15' y='25' width='10' height='8' rx='2' fill='%231c1b2e'/%3E%3Crect x='28' y='25' width='10' height='8' rx='2' fill='%231c1b2e'/%3E%3Crect x='41' y='25' width='8' height='8' rx='2' fill='%231c1b2e'/%3E%3Ccircle cx='21' cy='48' r='5' fill='%231c1b2e'/%3E%3Ccircle cx='43' cy='48' r='5' fill='%231c1b2e'/%3E%3C/svg%3E" />
+    <meta name="theme-color" content="#00211e" />
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%2300211e'/%3E%3Crect x='10' y='20' width='44' height='26' rx='7' fill='%23ffe600'/%3E%3Crect x='15' y='25' width='10' height='8' rx='2' fill='%2300211e'/%3E%3Crect x='28' y='25' width='10' height='8' rx='2' fill='%2300211e'/%3E%3Crect x='41' y='25' width='8' height='8' rx='2' fill='%2300211e'/%3E%3Ccircle cx='21' cy='48' r='5' fill='%2300211e'/%3E%3Ccircle cx='43' cy='48' r='5' fill='%2300211e'/%3E%3C/svg%3E" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
@@ -18,7 +18,7 @@
 
     <header class="nav">
       <a class="logo" href="#top" aria-label="SchoolBus Live">
-        <span class="logo-mark"><svg viewBox="0 0 64 64"><rect x="8" y="18" width="48" height="28" rx="8" fill="#ffc21a"/><rect x="14" y="24" width="10" height="9" rx="2" fill="#1c1b2e"/><rect x="27" y="24" width="10" height="9" rx="2" fill="#1c1b2e"/><rect x="40" y="24" width="10" height="9" rx="2" fill="#1c1b2e"/><circle cx="21" cy="48" r="5.5" fill="#1c1b2e"/><circle cx="43" cy="48" r="5.5" fill="#1c1b2e"/></svg></span>
+        <span class="logo-mark"><svg viewBox="0 0 64 64"><rect x="8" y="18" width="48" height="28" rx="8" fill="#ffe600"/><rect x="14" y="24" width="10" height="9" rx="2" fill="#00211e"/><rect x="27" y="24" width="10" height="9" rx="2" fill="#00211e"/><rect x="40" y="24" width="10" height="9" rx="2" fill="#00211e"/><circle cx="21" cy="48" r="5.5" fill="#00211e"/><circle cx="43" cy="48" r="5.5" fill="#00211e"/></svg></span>
         SchoolBus<b>Live</b>
       </a>
       <nav class="nav-links">
@@ -78,11 +78,11 @@
                     </defs>
                     <rect width="240" height="230" fill="url(#mapbg)"/>
                     <g stroke="#fff" stroke-width="7" fill="none" opacity=".9"><path d="M-10 60 L250 80"/><path d="M-10 160 L250 130"/><path d="M70 -10 L90 240"/><path d="M170 -10 L150 240"/></g>
-                    <path id="route" d="M30 205 C 60 150, 20 120, 80 100 S 170 120, 150 60 S 190 25, 212 22" fill="none" stroke="#c7c9ff" stroke-width="7" stroke-linecap="round"/>
-                    <path id="routeDone" d="M30 205 C 60 150, 20 120, 80 100 S 170 120, 150 60 S 190 25, 212 22" fill="none" stroke="#4f46e5" stroke-width="7" stroke-linecap="round" pathLength="1" stroke-dasharray="1" stroke-dashoffset="1"/>
-                    <circle cx="150" cy="60" r="8" fill="#fff" stroke="#ef476f" stroke-width="4"/>
-                    <circle cx="212" cy="22" r="9" fill="#ff8a65" stroke="#fff" stroke-width="3"/>
-                    <g id="busDot"><circle r="15" fill="#4f46e5" opacity=".18" class="pulse"/><circle r="9" fill="#ffc21a" stroke="#1c1b2e" stroke-width="3"/></g>
+                    <path id="route" d="M30 205 C 60 150, 20 120, 80 100 S 170 120, 150 60 S 190 25, 212 22" fill="none" stroke="#cfe9dc" stroke-width="7" stroke-linecap="round"/>
+                    <path id="routeDone" d="M30 205 C 60 150, 20 120, 80 100 S 170 120, 150 60 S 190 25, 212 22" fill="none" stroke="#00211e" stroke-width="7" stroke-linecap="round" pathLength="1" stroke-dasharray="1" stroke-dashoffset="1"/>
+                    <circle cx="150" cy="60" r="8" fill="#fff" stroke="#00211e" stroke-width="4"/>
+                    <circle cx="212" cy="22" r="9" fill="#ffe600" stroke="#00211e" stroke-width="3"/>
+                    <g id="busDot"><circle r="15" fill="#00211e" opacity=".22" class="pulse"/><circle r="9" fill="#ffe600" stroke="#00211e" stroke-width="3"/></g>
                   </svg>
                 </div>
                 <div class="ph-card">
